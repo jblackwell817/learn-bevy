@@ -1,53 +1,45 @@
-//! Shows how to render simple primitive shapes with a single colour.
-
-//! A simplified implementation of the classic game "Breakout".
+//! A simple implementation of space invaders.
 
 use bevy::{
     prelude::*,
-    sprite::collide_aabb::{collide, Collision},
-    sprite::MaterialMesh2dBundle, app::AppExit,
+    sprite::collide_aabb::collide,
+    sprite::MaterialMesh2dBundle
 };
 use rand::Rng;
 
-// These constants are defined in `Transform` units.
-// Using the default 2D camera they correspond 1:1 with screen pixels.
-const PADDLE_SIZE: Vec3 = Vec3::new(120.0, 20.0, 0.0);
-const GAP_BETWEEN_PADDLE_AND_FLOOR: f32 = 60.0;
-const PADDLE_SPEED: f32 = 700.0;
-// How close can the paddle get to the wall
-const PADDLE_PADDING: f32 = 10.0;
-
-const BULLET_SIZE: Vec3 = Vec3::new(15.0, 15.0, 0.0);
-const BULLET_SPEED: f32 = 700.0;
+// Sizes and coordinates
+const SPACESHIP_SIZE: Vec3 = Vec3::new(120.0, 20.0, 0.0);
+const GAP_BETWEEN_SPACESHIP_AND_FLOOR: f32 = 60.0;
+const SPACESHIP_SPEED: f32 = 700.0;
+const SPACESHIP_PADDING: f32 = 10.0;
+const LASER_SIZE: Vec3 = Vec3::new(15.0, 15.0, 0.0);
+const LASER_SPEED: f32 = 700.0;
 const ALIEN_SPEED: f32 = 300.0;
-const INITIAL_BULLET_DIRECTION: Vec2 = Vec2::new(0., 1.);
+const INITIAL_LASER_DIRECTION: Vec2 = Vec2::new(0., 1.);
 const INITIAL_ALIEN_DIRECTION: Vec2 = Vec2::new(0., -1.);
-
 const WALL_THICKNESS: f32 = 10.0;
-// x coordinates
 const LEFT_WALL: f32 = -450.;
 const RIGHT_WALL: f32 = 450.;
-// y coordinates
 const BOTTOM_WALL: f32 = -300.;
 const TOP_WALL: f32 = 300.;
-
 const ALIEN_SIZE: Vec2 = Vec2::new(70., 30.);
 
+// Text
 const SCOREBOARD_FONT_SIZE: f32 = 40.0;
 const SCOREBOARD_TEXT_PADDING: Val = Val::Px(5.0);
 const GAME_OVER_FONT_SIZE: f32 = 60.0;
 
+// Colours of objects
 const BACKGROUND_COLOR: Color = Color::rgb(0.9, 0.9, 0.9);
-const PADDLE_COLOR: Color = Color::rgb(0.3, 0.3, 0.7);
-const PADDLE_HIT_COLOR: Color = Color::rgb(1.0, 0.3, 0.7);
-const BULLET_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
+const SPACESHIP_COLOR: Color = Color::rgb(0.3, 0.3, 0.7);
+const LASER_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
 const ALIEN_COLOR: Color = Color::rgb(0.5, 0.5, 1.0);
 const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 const TEXT_COLOR: Color = Color::rgb(0.5, 0.5, 1.0);
 const SCORE_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
 const LIVES_COLOR: Color = Color::rgb(1.0, 0.0, 1.0);
 
-const ALIEN_SPAWN_TIME: f32 = 1.0;
+const ALIEN_SPAWN_TIME: f32 = 1.0; // new alien every second
 
 fn main() {
     App::new()
@@ -63,10 +55,9 @@ fn main() {
             FixedUpdate,
             (
                 apply_velocity,
-                move_paddle,
-                fire_gun,
+                move_spaceship,
+                fire_laser,
                 check_for_collisions,
-                play_collision_sound,
                 tick_alien_spawn_timer,
                 spawn_alien,
             )
@@ -89,10 +80,10 @@ enum GameState {
 impl States for GameState {}
 
 #[derive(Component)]
-struct Paddle;
+struct Spaceship;
 
 #[derive(Component)]
-struct Bullet;
+struct Laser;
 
 #[derive(Component, Deref, DerefMut)]
 struct Velocity(Vec2);
@@ -224,26 +215,26 @@ fn setup(
     commands.spawn(Camera2dBundle::default());
 
     // Sound
-    let bullet_collision_sound = asset_server.load("sounds/breakout_collision.ogg");
-    commands.insert_resource(CollisionSound(bullet_collision_sound));
+    let laser_collision_sound = asset_server.load("sounds/breakout_collision.ogg");
+    commands.insert_resource(CollisionSound(laser_collision_sound));
 
-    // Paddle
-    let paddle_y = BOTTOM_WALL + GAP_BETWEEN_PADDLE_AND_FLOOR;
+    // Spaceship
+    let spaceship_y = BOTTOM_WALL + GAP_BETWEEN_SPACESHIP_AND_FLOOR;
 
     commands.spawn((
         SpriteBundle {
             transform: Transform {
-                translation: Vec3::new(0.0, paddle_y, 0.0),
-                scale: PADDLE_SIZE,
+                translation: Vec3::new(0.0, spaceship_y, 0.0),
+                scale: SPACESHIP_SIZE,
                 ..default()
             },
             sprite: Sprite {
-                color: PADDLE_COLOR,
+                color: SPACESHIP_COLOR,
                 ..default()
             },
             ..default()
         },
-        Paddle,
+        Spaceship,
         Collider,
     ));
 
@@ -292,12 +283,12 @@ fn setup(
     commands.spawn(WallBundle::new(WallLocation::Top));
 }
 
-fn move_paddle(
+fn move_spaceship(
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut Transform, With<Paddle>>,
+    mut query: Query<&mut Transform, With<Spaceship>>,
     time: Res<Time>,
 ) {
-    let mut paddle_transform = query.single_mut();
+    let mut spaceship_transform = query.single_mut();
     let mut direction = 0.0;
 
     if keyboard_input.pressed(KeyCode::Left) {
@@ -308,37 +299,37 @@ fn move_paddle(
         direction += 1.0;
     }
 
-    // Calculate the new horizontal paddle position based on player input
-    let new_paddle_position =
-        paddle_transform.translation.x + direction * PADDLE_SPEED * time.delta_seconds();
+    // Calculate the new horizontal spaceship position based on player input
+    let new_spaceship_position =
+        spaceship_transform.translation.x + direction * SPACESHIP_SPEED * time.delta_seconds();
 
-    // Update the paddle position,
-    // making sure it doesn't cause the paddle to leave the arena
-    let left_bound = LEFT_WALL + WALL_THICKNESS / 2.0 + PADDLE_SIZE.x / 2.0 + PADDLE_PADDING;
-    let right_bound = RIGHT_WALL - WALL_THICKNESS / 2.0 - PADDLE_SIZE.x / 2.0 - PADDLE_PADDING;
+    // Update the spaceship position,
+    // making sure it doesn't cause the spaceship to leave the arena
+    let left_bound = LEFT_WALL + WALL_THICKNESS / 2.0 + SPACESHIP_SIZE.x / 2.0 + SPACESHIP_PADDING;
+    let right_bound = RIGHT_WALL - WALL_THICKNESS / 2.0 - SPACESHIP_SIZE.x / 2.0 - SPACESHIP_PADDING;
 
-    paddle_transform.translation.x = new_paddle_position.clamp(left_bound, right_bound);
+    spaceship_transform.translation.x = new_spaceship_position.clamp(left_bound, right_bound);
 }
 
-fn fire_gun(
+fn fire_laser(
     mut commands: Commands,
     keyboard_input: Res<Input<KeyCode>>,
-    mut query: Query<&mut Transform, With<Paddle>>,
+    mut query: Query<&mut Transform, With<Spaceship>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let mut paddle_transform = query.single_mut().translation;
-    paddle_transform.y = paddle_transform.y + PADDLE_SIZE.y;
+    let mut spaceship_transform = query.single_mut().translation;
+    spaceship_transform.y = spaceship_transform.y + SPACESHIP_SIZE.y;
     if keyboard_input.just_pressed(KeyCode::Space) {
         commands.spawn((
             MaterialMesh2dBundle {
                 mesh: meshes.add(shape::Circle::default().into()).into(),
-                material: materials.add(ColorMaterial::from(BULLET_COLOR)),
-                transform: Transform::from_translation(paddle_transform).with_scale(BULLET_SIZE),
+                material: materials.add(ColorMaterial::from(LASER_COLOR)),
+                transform: Transform::from_translation(spaceship_transform).with_scale(LASER_SIZE),
                 ..default()
             },
-            Bullet,
-            Velocity(INITIAL_BULLET_DIRECTION.normalize() * BULLET_SPEED),
+            Laser,
+            Velocity(INITIAL_LASER_DIRECTION.normalize() * LASER_SPEED),
         ));
     }
 }
@@ -408,18 +399,18 @@ fn check_for_collisions(
     mut commands: Commands,
     mut scoreboard: ResMut<Scoreboard>,
     mut lives_remaining: ResMut<LivesCounter>,
-    bullet_query: Query<(Entity, &Transform), With<Bullet>>,
+    laser_query: Query<(Entity, &Transform), With<Laser>>,
     collider_query: Query<(Entity, &Transform, Option<&Alien>), With<Collider>>,
-    paddle_query: Query<(Entity, &Transform), With<Paddle>>,
+    spaceship_query: Query<&Transform, With<Spaceship>>,
     mut collision_events: EventWriter<CollisionEvent>,
 ) {
     for (collider_entity, transform, maybe_alien) in &collider_query {
-        // Check if collision was with a bullet
-        for (bullet, bullet_transform) in bullet_query.iter() {
-            let bullet_size = bullet_transform.scale.truncate();
+        // Check if collision was with a laser
+        for (laser, laser_transform) in laser_query.iter() {
+            let laser_size = laser_transform.scale.truncate();
             let collision = collide(
-                bullet_transform.translation,
-                bullet_size,
+                laser_transform.translation,
+                laser_size,
                 transform.translation,
                 transform.scale.truncate(),
             );
@@ -431,21 +422,21 @@ fn check_for_collisions(
                 if maybe_alien.is_some() {
                     scoreboard.score += 3;
                     commands.entity(collider_entity).despawn();
-                    commands.entity(bullet).despawn();
+                    commands.entity(laser).despawn();
                 }
             }
         }
 
-        // Check if collision was with paddle
-        let (paddle, paddle_transform) = paddle_query.single();
-        let paddle_size = paddle_transform.scale.truncate();
-        let paddle_collision = collide(
-            paddle_transform.translation,
-            paddle_size,
+        // Check if collision was with spaceship
+        let spaceship_transform = spaceship_query.single();
+        let spaceship_size = spaceship_transform.scale.truncate();
+        let spaceship_collision = collide(
+            spaceship_transform.translation,
+            spaceship_size,
             transform.translation,
             transform.scale.truncate(),
         );
-        if paddle_collision.is_some() && maybe_alien.is_some() {
+        if spaceship_collision.is_some() && maybe_alien.is_some() {
             lives_remaining.count -= 1;
             commands.entity(collider_entity).despawn();
         }
@@ -461,23 +452,6 @@ fn check_for_collisions(
             scoreboard.score -= 1;
             commands.entity(collider_entity).despawn();
         }
-    }
-}
-
-fn play_collision_sound(
-    mut commands: Commands,
-    mut collision_events: EventReader<CollisionEvent>,
-    sound: Res<CollisionSound>,
-) {
-    // Play a sound once per frame if a collision occurred.
-    if !collision_events.is_empty() {
-        // This prevents events staying active on the next frame.
-        collision_events.clear();
-        commands.spawn(AudioBundle {
-            source: sound.0.clone(),
-            // auto-despawn the entity when playback finishes
-            settings: PlaybackSettings::DESPAWN,
-        });
     }
 }
 
