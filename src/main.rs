@@ -25,11 +25,12 @@ const TOP_WALL: f32 = 300.;
 const ALIEN_SIZE: Vec2 = Vec2::new(70., 30.);
 
 // Text
+const INSTRUCTIONS_FONT_SIZE: f32 = 15.0;
 const SCOREBOARD_FONT_SIZE: f32 = 40.0;
 const SCOREBOARD_TEXT_PADDING: Val = Val::Px(5.0);
 const GAME_OVER_FONT_SIZE: f32 = 60.0;
 
-// Colours of objects
+// Colours of objects and text
 const BACKGROUND_COLOR: Color = Color::rgb(0.9, 0.9, 0.9);
 const SPACESHIP_COLOR: Color = Color::rgb(0.3, 0.3, 0.7);
 const LASER_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
@@ -37,7 +38,6 @@ const ALIEN_COLOR: Color = Color::rgb(0.5, 0.5, 1.0);
 const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
 const TEXT_COLOR: Color = Color::rgb(0.5, 0.5, 1.0);
 const SCORE_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
-const LIVES_COLOR: Color = Color::rgb(1.0, 0.0, 1.0);
 
 const ALIEN_SPAWN_TIME: f32 = 1.0; // new alien every second
 
@@ -50,7 +50,12 @@ fn main() {
         .init_resource::<AlienSpawnTimer>()
         .add_event::<CollisionEvent>()
         .add_state::<GameState>()
-        .add_systems(OnEnter(GameState::InGame), setup)
+        .add_systems(OnEnter(GameState::MainMenu), setup)
+        .add_systems(
+            FixedUpdate,
+            start_game
+            .run_if(in_state(GameState::MainMenu))
+        )
         .add_systems(
             FixedUpdate,
             (
@@ -73,6 +78,7 @@ fn main() {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Default)]
 enum GameState {
     #[default]
+    MainMenu,
     InGame,
     GameOver,
 }
@@ -97,8 +103,8 @@ struct CollisionEvent;
 #[derive(Component)]
 struct Alien;
 
-#[derive(Resource)]
-struct CollisionSound(Handle<AudioSource>);
+#[derive(Component)]
+struct Instructions;
 
 // This bundle is a collection of the components that define a "wall" in our game
 #[derive(Bundle)]
@@ -209,14 +215,9 @@ impl Default for AlienSpawnTimer {
 // Add the game's entities to our world
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
 ) {
     // Camera
     commands.spawn(Camera2dBundle::default());
-
-    // Sound
-    let laser_collision_sound = asset_server.load("sounds/breakout_collision.ogg");
-    commands.insert_resource(CollisionSound(laser_collision_sound));
 
     // Spaceship
     let spaceship_y = BOTTOM_WALL + GAP_BETWEEN_SPACESHIP_AND_FLOOR;
@@ -281,6 +282,32 @@ fn setup(
     commands.spawn(WallBundle::new(WallLocation::Right));
     commands.spawn(WallBundle::new(WallLocation::Bottom));
     commands.spawn(WallBundle::new(WallLocation::Top));
+
+    // Instructions
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+                "Welcome to Space Invaders.
+                \nUse the arrow keys to control your spaceship.
+                \nUse the spacebar to fire lasers at aliens. 
+                \nYou will gain points for any aliens you hit and lose points for any aliens which get past you.
+                \nYou will lose a life for any aliens which hit you.
+                \nPress esc to leave the game at any point.
+                \nPress enter to start.",
+                TextStyle {
+                    font_size: INSTRUCTIONS_FONT_SIZE,
+                    color: TEXT_COLOR,
+                    ..default()
+                },
+            ),
+        ])
+        .with_style(Style {
+            align_self: AlignSelf::Center,
+            justify_self: JustifySelf::Center,
+            ..default()
+        },),
+        Instructions,
+    ));
 }
 
 fn move_spaceship(
@@ -309,6 +336,20 @@ fn move_spaceship(
     let right_bound = RIGHT_WALL - WALL_THICKNESS / 2.0 - SPACESHIP_SIZE.x / 2.0 - SPACESHIP_PADDING;
 
     spaceship_transform.translation.x = new_spaceship_position.clamp(left_bound, right_bound);
+}
+
+// If return is pressed, remove the instructions and change the game state to in-game
+fn start_game(
+    mut commands: Commands,
+    keyboard_input: Res<Input<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut query: Query<Entity, With<Instructions>>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Return) {
+        let instructions = query.single_mut();
+        commands.entity(instructions).despawn();
+        next_state.set(GameState::InGame);
+    }
 }
 
 fn fire_laser(
@@ -465,7 +506,7 @@ fn display_game_over(
                         "Game Over",
                         TextStyle {
                             font_size: GAME_OVER_FONT_SIZE,
-                            color: LIVES_COLOR,
+                            color: TEXT_COLOR,
                             ..default()
                         },
                     ),
@@ -473,7 +514,7 @@ fn display_game_over(
                         "\nYour score: ",
                         TextStyle {
                             font_size: GAME_OVER_FONT_SIZE,
-                            color: LIVES_COLOR,
+                            color: TEXT_COLOR,
                             ..default()
                         },
                     ),
@@ -481,7 +522,15 @@ fn display_game_over(
                         final_score,
                         TextStyle {
                             font_size: GAME_OVER_FONT_SIZE,
-                            color: LIVES_COLOR,
+                            color: SCORE_COLOR,
+                            ..default()
+                        },
+                    ),
+                    TextSection::new(
+                        "\nPress esc to exit",
+                        TextStyle {
+                            font_size: INSTRUCTIONS_FONT_SIZE,
+                            color: TEXT_COLOR,
                             ..default()
                         },
                     ),
