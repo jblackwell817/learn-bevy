@@ -6,40 +6,8 @@ use bevy::{
     sprite::MaterialMesh2dBundle
 };
 use rand::Rng;
-
-// Sizes and coordinates
-const SPACESHIP_SIZE: Vec3 = Vec3::new(120.0, 20.0, 0.0);
-const GAP_BETWEEN_SPACESHIP_AND_FLOOR: f32 = 60.0;
-const SPACESHIP_SPEED: f32 = 700.0;
-const SPACESHIP_PADDING: f32 = 10.0;
-const LASER_SIZE: Vec3 = Vec3::new(15.0, 15.0, 0.0);
-const LASER_SPEED: f32 = 700.0;
-const ALIEN_SPEED: f32 = 300.0;
-const INITIAL_LASER_DIRECTION: Vec2 = Vec2::new(0., 1.);
-const INITIAL_ALIEN_DIRECTION: Vec2 = Vec2::new(0., -1.);
-const WALL_THICKNESS: f32 = 10.0;
-const LEFT_WALL: f32 = -450.;
-const RIGHT_WALL: f32 = 450.;
-const BOTTOM_WALL: f32 = -300.;
-const TOP_WALL: f32 = 300.;
-const ALIEN_SIZE: Vec2 = Vec2::new(70., 30.);
-
-// Text
-const INSTRUCTIONS_FONT_SIZE: f32 = 15.0;
-const SCOREBOARD_FONT_SIZE: f32 = 40.0;
-const SCOREBOARD_TEXT_PADDING: Val = Val::Px(5.0);
-const GAME_OVER_FONT_SIZE: f32 = 60.0;
-
-// Colours of objects and text
-const BACKGROUND_COLOR: Color = Color::rgb(0.9, 0.9, 0.9);
-const SPACESHIP_COLOR: Color = Color::rgb(0.3, 0.3, 0.7);
-const LASER_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
-const ALIEN_COLOR: Color = Color::rgb(0.5, 0.5, 1.0);
-const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
-const TEXT_COLOR: Color = Color::rgb(0.5, 0.5, 1.0);
-const SCORE_COLOR: Color = Color::rgb(1.0, 0.5, 0.5);
-
-const ALIEN_SPAWN_TIME: f32 = 1.0; // new alien every second
+use crate::constants::*;
+use crate::components::*;
 
 fn main() {
     App::new()
@@ -85,115 +53,13 @@ enum GameState {
 
 impl States for GameState {}
 
-#[derive(Component)]
-struct Spaceship;
-
-#[derive(Component)]
-struct Laser;
-
-#[derive(Component, Deref, DerefMut)]
-struct Velocity(Vec2);
-
-#[derive(Component)]
-struct Collider;
-
-#[derive(Event, Default)]
-struct CollisionEvent;
-
-#[derive(Component)]
-struct Alien;
-
-#[derive(Component)]
-struct Instructions;
-
-// This bundle is a collection of the components that define a "wall" in our game
-#[derive(Bundle)]
-struct WallBundle {
-    // You can nest bundles inside of other bundles like this
-    // Allowing you to compose their functionality
-    sprite_bundle: SpriteBundle,
-    collider: Collider,
-}
-
-/// Which side of the arena is this wall located on?
-enum WallLocation {
-    Left,
-    Right,
-    Bottom,
-    Top,
-}
-
-impl WallLocation {
-    fn position(&self) -> Vec2 {
-        match self {
-            WallLocation::Left => Vec2::new(LEFT_WALL, 0.),
-            WallLocation::Right => Vec2::new(RIGHT_WALL, 0.),
-            WallLocation::Bottom => Vec2::new(0., BOTTOM_WALL),
-            WallLocation::Top => Vec2::new(0., TOP_WALL),
-        }
-    }
-
-    fn position_3d(&self) -> Vec3 {
-        match self {
-            WallLocation::Left => Vec3::new(LEFT_WALL, 0., 0.),
-            WallLocation::Right => Vec3::new(RIGHT_WALL, 0., 0.),
-            WallLocation::Bottom => Vec3::new(0., BOTTOM_WALL, 0.),
-            WallLocation::Top => Vec3::new(0., TOP_WALL, 0.),
-        }
-    }
-
-    fn size(&self) -> Vec2 {
-        let arena_height = TOP_WALL - BOTTOM_WALL;
-        let arena_width = RIGHT_WALL - LEFT_WALL;
-        // Make sure we haven't messed up our constants
-        assert!(arena_height > 0.0);
-        assert!(arena_width > 0.0);
-
-        match self {
-            WallLocation::Left | WallLocation::Right => {
-                Vec2::new(WALL_THICKNESS, arena_height + WALL_THICKNESS)
-            }
-            WallLocation::Bottom | WallLocation::Top => {
-                Vec2::new(arena_width + WALL_THICKNESS, WALL_THICKNESS)
-            }
-        }
-    }
-}
-
-impl WallBundle {
-    // This "builder method" allows us to reuse logic across our wall entities,
-    // making our code easier to read and less prone to bugs when we change the logic
-    fn new(location: WallLocation) -> WallBundle {
-        WallBundle {
-            sprite_bundle: SpriteBundle {
-                transform: Transform {
-                    // We need to convert our Vec2 into a Vec3, by giving it a z-coordinate
-                    // This is used to determine the order of our sprites
-                    translation: location.position().extend(0.0),
-                    // The z-scale of 2D objects must always be 1.0,
-                    // or their ordering will be affected in surprising ways.
-                    // See https://github.com/bevyengine/bevy/issues/4149
-                    scale: location.size().extend(1.0),
-                    ..default()
-                },
-                sprite: Sprite {
-                    color: WALL_COLOR,
-                    ..default()
-                },
-                ..default()
-            },
-            collider: Collider,
-        }
-    }
-}
-
-// This resource tracks the game's score
+// Track the game's score
 #[derive(Resource)]
 struct Scoreboard {
     score: i16,
 }
 
-// This resource tracks the number of lives remaining
+// Track the number of lives remaining
 #[derive(Resource)]
 struct LivesCounter {
     count: u16,
@@ -212,7 +78,7 @@ impl Default for AlienSpawnTimer {
     }
 }
 
-// Add the game's entities to our world
+// Add the game's entities
 fn setup(
     mut commands: Commands,
 ) {
@@ -221,7 +87,6 @@ fn setup(
 
     // Spaceship
     let spaceship_y = BOTTOM_WALL + GAP_BETWEEN_SPACESHIP_AND_FLOOR;
-
     commands.spawn((
         SpriteBundle {
             transform: Transform {
@@ -310,6 +175,7 @@ fn setup(
     ));
 }
 
+// Use keyboard input to move the spaceship
 fn move_spaceship(
     keyboard_input: Res<Input<KeyCode>>,
     mut query: Query<&mut Transform, With<Spaceship>>,
@@ -375,6 +241,7 @@ fn fire_laser(
     }
 }
 
+// Apply velocity to any entity with the Velocity component
 fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>) {
     for (mut transform, velocity) in &mut query {
         transform.translation.x += velocity.x * time.delta_seconds();
@@ -397,6 +264,7 @@ fn update_lives_remaining(lives_counter: Res<LivesCounter>, mut query: Query<&mu
     text.sections[3].value = lives_remaining.to_string();
 }
 
+// Increment timer for spawning aliens
 fn tick_alien_spawn_timer(
     mut alien_spawn_timer: ResMut<AlienSpawnTimer>,
     time: Res<Time>
@@ -404,12 +272,12 @@ fn tick_alien_spawn_timer(
     alien_spawn_timer.timer.tick(time.delta());
 }
 
+// Spawn an alien from a random starting position
 fn spawn_alien(
     mut commands: Commands,
     alien_spawn_timer: Res<AlienSpawnTimer>
 ) {
     if alien_spawn_timer.timer.finished() {
-        // Pick a random starting position
         let lower_bound = LEFT_WALL + ALIEN_SIZE.x;
         let upper_bound = RIGHT_WALL - ALIEN_SIZE.x;
         let starting_x = rand::thread_rng().gen_range(lower_bound..upper_bound);
@@ -542,3 +410,6 @@ fn display_game_over(
                 }),
         );
 }
+
+mod components;
+mod constants;
